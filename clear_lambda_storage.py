@@ -1,9 +1,11 @@
 """
 Removes old versions of Lambda functions.
 """
+
 from __future__ import print_function
 import argparse
 import boto3
+
 try:
     import queue
 except ImportError:
@@ -12,7 +14,7 @@ from boto3.session import Session
 from botocore.exceptions import ClientError
 
 
-LATEST = '$LATEST'
+LATEST = "$LATEST"
 
 
 def list_available_lambda_regions():
@@ -21,7 +23,7 @@ def list_available_lambda_regions():
     :return: list of regions
     """
     session = Session()
-    return session.get_available_regions('lambda')
+    return session.get_available_regions("lambda")
 
 
 def init_boto_client(client_name, region, args):
@@ -37,7 +39,7 @@ def init_boto_client(client_name, region, args):
             client_name,
             aws_access_key_id=args.token_key_id,
             aws_secret_access_key=args.token_secret,
-            region_name=region
+            region_name=region,
         )
     elif args.profile:
         session = boto3.session.Session(profile_name=args.profile)
@@ -57,19 +59,21 @@ def lambda_function_generator(lambda_client):
     next_marker = None
     try:
         response = lambda_client.list_functions()
-    except Exception:
-        print('Could not scan region')
-        return iter([])
+        if not response or "Functions" not in response:
+            print(f"Invalid response from list_functions: {response}")
+            yield from []
+    except Exception:  # pylint: disable=broad-exception-caught
+        print("Could not scan region")
+        yield from []
 
-    while next_marker != '':
-        next_marker = ''
-        functions = response['Functions']
-        for lambda_function in functions:
-            yield lambda_function
+    while next_marker != "":
+        next_marker = ""
+        functions = response["Functions"]
+        yield from functions
 
         # Verify if there is next marker
-        if 'NextMarker' in response:
-            next_marker = response['NextMarker']
+        if "NextMarker" in response:
+            next_marker = response["NextMarker"]
             response = lambda_client.list_functions(Marker=next_marker)
 
 
@@ -82,21 +86,19 @@ def lambda_version_generator(lambda_client, lambda_function):
     """
     next_marker = None
     response = lambda_client.list_versions_by_function(
-        FunctionName=lambda_function['FunctionArn']
+        FunctionName=lambda_function["FunctionArn"]
     )
 
-    while next_marker != '':
-        next_marker = ''
-        versions = response['Versions']
-        for version in versions:
-            yield version
+    while next_marker != "":
+        next_marker = ""
+        versions = response["Versions"]
+        yield from versions
 
         # Verify if there is next marker
-        if 'NextMarker' in response:
-            next_marker = response['NextMarker']
+        if "NextMarker" in response:
+            next_marker = response["NextMarker"]
             response = lambda_client.list_versions_by_function(
-                FunctionName=lambda_function['FunctionArn'],
-                Marker=next_marker
+                FunctionName=lambda_function["FunctionArn"], Marker=next_marker
             )
 
 
@@ -110,135 +112,137 @@ def remove_old_lambda_versions(args):
     total_deleted_code_size = 0
     total_deleted_functions = {}
     num_to_keep = args.num_to_keep
-    print('Keeping {} versions for functions'.format(num_to_keep))
+    print(f"Keeping {num_to_keep} versions for functions")
     if args.function_names:
-        print('Will only delete lambda versions for functions: {}'.format(" ,".join(args.function_names)))
+        print(
+            f"Will only delete lambda versions for functions: {', '.join(args.function_names)}"
+        )
 
-    for region in regions:
-        print('Scanning {} region'.format(region))
+    for region in regions:  # pylint: disable=too-many-nested-blocks
+        print(f"Scanning {region} region")
 
-        lambda_client = init_boto_client('lambda', region, args)
+        lambda_client = init_boto_client("lambda", region, args)
         try:
             function_generator = lambda_function_generator(lambda_client)
-        except Exception as exception:
-            print('Could not scan region: {}'.format(str(exception)))
+        except Exception as exception:  # pylint: disable=broad-exception-caught
+            print(f"Could not scan region: {str(exception)}")
             continue
 
         for lambda_function in function_generator:
             # Verify if function name is provided and in case it is, skips all lambdas which name does not match
-            if args.function_names and lambda_function['FunctionName'] not in args.function_names:
+            if (
+                args.function_names
+                and lambda_function["FunctionName"] not in args.function_names
+            ):
                 continue
 
             versions_to_keep = queue.Queue(maxsize=num_to_keep)
 
             for version in lambda_version_generator(lambda_client, lambda_function):
-
-                if version['Version'] in (lambda_function['Version'], '$LATEST'):
+                if version["Version"] in (lambda_function["Version"], "$LATEST"):
                     continue
 
                 if versions_to_keep.full():
                     version_to_delete = versions_to_keep.get()
-                    print('Detected {} with an old version {}'.format(
-                        version_to_delete['FunctionName'],
-                        version_to_delete['Version'])
+                    print(
+                        f"Detected {version_to_delete['FunctionName']} with an old version {version_to_delete['Version']}"  # pylint: disable=line-too-long
                     )
-                    total_deleted_functions.setdefault(version_to_delete['FunctionName'], 0)
-                    total_deleted_functions[version_to_delete['FunctionName']] += 1
-                    total_deleted_code_size += (version_to_delete['CodeSize'] / (1024 * 1024))
+                    total_deleted_functions.setdefault(
+                        version_to_delete["FunctionName"], 0
+                    )
+                    total_deleted_functions[version_to_delete["FunctionName"]] += 1
+                    total_deleted_code_size += version_to_delete["CodeSize"] / (
+                        1024 * 1024
+                    )
 
                     # DELETE OPERATION!
                     if args.dry_run:
-                        print('Dry-Run: This process would delete function: {}'.format(version_to_delete["FunctionArn"]))
+                        print(
+                            f"Dry-Run: This process would delete function: {version_to_delete['FunctionArn']}"
+                        )
                     else:
                         try:
                             lambda_client.delete_function(
-                                FunctionName=version_to_delete['FunctionArn']
+                                FunctionName=version_to_delete["FunctionArn"]
                             )
                         except ClientError as exception:
-                            print('Could not delete function: {}'.format(str(exception)))
+                            print(f"Could not delete function: {str(exception)}")
                 versions_to_keep.put(version)
 
-    print('-' * 10)
-    print('Deleted {} versions from {} functions'.format(
-        sum(total_deleted_functions.values()),
-        len(total_deleted_functions.keys())
-    ))
-    print('Freed {} MBs'.format(int(total_deleted_code_size)))
+    print("-" * 10)
+    print(
+        f"Deleted {sum(total_deleted_functions.values())} versions from {len(total_deleted_functions.keys())} functions"
+    )
+    print(f"Freed {int(total_deleted_code_size)} MBs")
 
 
 def main():
+    """
+    Main function for removing old versions of Lambda functions.
+    """
     parser = argparse.ArgumentParser(
-        description='Removes old versions of Lambda functions.'
+        description="Removes old versions of Lambda functions."
     )
 
     parser.add_argument(
-        '--token-key-id',
+        "--token-key-id",
         type=str,
         help=(
-            'AWS access key id. Must provide AWS secret access key as well '
-            '(default: from local configuration).'
+            "AWS access key id. Must provide AWS secret access key as well "
+            "(default: from local configuration)."
         ),
-        metavar='token-key-id'
+        metavar="token-key-id",
     )
     parser.add_argument(
-        '--token-secret',
+        "--token-secret",
         type=str,
         help=(
-            'AWS secret access key. Must provide AWS access key id '
-            'as well (default: from local configuration.'
+            "AWS secret access key. Must provide AWS access key id "
+            "as well (default: from local configuration."
         ),
-        metavar='token-secret'
+        metavar="token-secret",
     )
     parser.add_argument(
-        '--profile',
+        "--profile",
         type=str,
-        help=(
-            'AWS profile. Optional '
-            '(default: "default" from local configuration).'
-        ),
-        metavar='profile'
+        help=('AWS profile. Optional (default: "default" from local configuration).'),
+        metavar="profile",
     )
 
     parser.add_argument(
-        '--regions',
-        nargs='+',
-        help='AWS region to look for old Lambda versions',
-        metavar='regions'
+        "--regions",
+        nargs="+",
+        help="AWS region to look for old Lambda versions",
+        metavar="regions",
     )
 
     parser.add_argument(
-        '--num-to-keep',
+        "--num-to-keep",
         type=int,
         default=2,
         help=(
-            'Number of latest versions to keep. Older versions will be deleted. Optional '
-            '(default: 2).'
+            "Number of latest versions to keep. Older versions will be deleted. Optional "
+            "(default: 2)."
         ),
-        metavar='num-to-keep'
+        metavar="num-to-keep",
     )
 
     parser.add_argument(
-        '--function-names',
-        nargs='+',
-        help=(
-            'Clear the storage of a single application. Optional '
-            '(default: None).'
-        ),
-        metavar='function-names'
+        "--function-names",
+        nargs="+",
+        help=("Clear the storage of a single application. Optional (default: None)."),
+        metavar="function-names",
     )
 
     parser.add_argument(
-        '--dry-run',
+        "--dry-run",
         type=bool,
         default=False,
-        help=(
-            'Run the function without deleting anything. Optional '
-            '(default: False).'
-        ),
-        metavar='dry-run'
+        help=("Run the function without deleting anything. Optional (default: False)."),
+        metavar="dry-run",
     )
     remove_old_lambda_versions(parser.parse_args())
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

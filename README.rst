@@ -46,23 +46,33 @@ Alternate usage:
 
     python clear_lambda_storage.py --profile <profile_id> --num-to-keep 2
 
-⚡️ `Serverless Framework <https://serverless.com>`_ usage
-----------------------------------------------------------
+⚡️ AWS SAM CLI usage
+----------------------
+This project now supports deployment using the AWS SAM CLI.
+
+**Prerequisites:**
+- AWS SAM CLI installed (https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/install-sam-cli.html)
+- An S3 bucket for deployment artifacts
+
+**Deploy steps:**
+
 .. code-block:: bash
 
-    npm i -g serverless
     git clone https://github.com/epsagon/clear-lambda-storage
     cd clear-lambda-storage/
-    serverless deploy
+    pip install -r requirements.txt
+    sam build
+    sam deploy --guided
 
-You can schedule this Lambda code storage clean to run every period you want:
+The first time you run `sam deploy --guided`, you will be prompted for parameters such as your S3 bucket and region. These will be saved in `samconfig.toml` for future deployments.
+
+**Schedule:**
+The Lambda is scheduled to run every Sunday at 12:00pm UTC by default. You can change the schedule by editing the `Schedule` property in `template.yaml`:
 
 .. code-block:: yaml
 
-    functions:
-      clear_lambda_storage:
-        handler: handler.clear_lambda_storage
-        memorySize: 128
-        timeout: 120
-        events:
-          - schedule: cron(0 12 ? * SUN *) # Run every sunday at 12:00pm UTC
+    Events:
+      ScheduledEvent:
+        Type: Schedule
+        Properties:
+          Schedule: cron(0 12 ? * SUN *)
