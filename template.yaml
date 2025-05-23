@@ -7,6 +7,9 @@ Parameters:
     Type: String
     Default: "cron(0 12 ? * SUN *)"
     Description: "Schedule expression for Lambda (default: every Sunday at 12:00pm UTC)"
+  Regions:
+    Type: String
+    Default: "eu-central-1,eu-west-1,us-east-1,us-east-2,us-west-2"
 
 Globals:
   Function:
@@ -20,6 +23,9 @@ Resources:
     Properties:
       Handler: handler.clear_lambda_storage
       CodeUri: .
+      Environment:
+        Variables:
+          REGIONS: !Ref Regions
       Description: Removes old versions of Lambda functions
       Policies:
         - Version: "2012-10-17"
