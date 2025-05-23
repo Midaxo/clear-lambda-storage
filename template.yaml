@@ -1,0 +1,37 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: Clear Lambda Storage - SAM Template
+
+Parameters:
+  ScheduleExpression:
+    Type: String
+    Default: "cron(0 12 ? * SUN *)"
+    Description: "Schedule expression for Lambda (default: every Sunday at 12:00pm UTC)"
+
+Globals:
+  Function:
+    Timeout: 900
+    MemorySize: 128
+    Runtime: python3.12
+
+Resources:
+  ClearLambdaStorageFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: handler.clear_lambda_storage
+      CodeUri: .
+      Description: Removes old versions of Lambda functions
+      Policies:
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - lambda:ListFunctions
+                - lambda:ListVersionsByFunction
+                - lambda:DeleteFunction
+              Resource: "*"
+      Events:
+        ScheduledEvent:
+          Type: Schedule
+          Properties:
+            Schedule: !Ref ScheduleExpression

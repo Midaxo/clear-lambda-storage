@@ -18,11 +18,10 @@ setuptools.setup(
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ],
-    install_requires="boto3",
-    python_requires='>=3',
+    python_requires=">=3",
     entry_points={
         "console_scripts": [
             "clear_lambda_storage = clear_lambda_storage:main",
         ]
-    }
+    },
 )

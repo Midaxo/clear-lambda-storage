@@ -1,0 +1,13 @@
+version = 0.1
+
+[default]
+
+[default.validate.parameters]
+lint = true
+
+[default.deploy.parameters]
+resolve_s3 = true
+stack_name = "clear-lambda-storage"
+s3_prefix = "clear-lambda-storage"
+capabilities = "CAPABILITY_IAM"
+confirm_changeset = false

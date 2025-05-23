@@ -5,3 +5,4 @@ __pycache__
 build
 clear_lambda_storage.egg-info
 dist
+/.aws-sam/

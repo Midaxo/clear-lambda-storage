@@ -11,58 +11,30 @@ The main reason of reaching such size is because for every deployment of existin
 Usually, when you reach that point, you want to remove old version.
 This tool will help you to!
 
+⚡️ AWS SAM CLI usage
+----------------------
+This project now supports deployment using the AWS SAM CLI.
 
-Setup
------
-Install via pip
+**Prerequisites:**
+- AWS SAM CLI installed (https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/install-sam-cli.html)
+- An S3 bucket for deployment artifacts
 
-.. code-block:: bash
-
-    pip install clear-lambda-storage
-    clear_lambda_storage
-
-Install via source
+**Deploy steps:**
 
 .. code-block:: bash
 
     git clone https://github.com/epsagon/clear-lambda-storage
     cd clear-lambda-storage/
-    pip install -r requirements.txt
-    python clear_lambda_storage.py
+    make build
+    make deploy
 
-
-Advanced usage
----------------
-
-Provide credentials:
-
-.. code-block:: bash
-
-    python clear_lambda_storage.py --token-key-id <access_key_id> --token-secret <secret_access_key>
-
-Alternate usage:
-
-.. code-block:: bash
-
-    python clear_lambda_storage.py --profile <profile_id> --num-to-keep 2
-
-⚡️ `Serverless Framework <https://serverless.com>`_ usage
-----------------------------------------------------------
-.. code-block:: bash
-
-    npm i -g serverless
-    git clone https://github.com/epsagon/clear-lambda-storage
-    cd clear-lambda-storage/
-    serverless deploy
-
-You can schedule this Lambda code storage clean to run every period you want:
+**Schedule:**
+The Lambda is scheduled to run every Sunday at 12:00pm UTC by default. You can change the schedule by editing the `Schedule` property in `template.yaml`:
 
 .. code-block:: yaml
 
-    functions:
-      clear_lambda_storage:
-        handler: handler.clear_lambda_storage
-        memorySize: 128
-        timeout: 120
-        events:
-          - schedule: cron(0 12 ? * SUN *) # Run every sunday at 12:00pm UTC
+    Events:
+      ScheduledEvent:
+        Type: Schedule
+        Properties:
+          Schedule: cron(0 12 ? * SUN *)
